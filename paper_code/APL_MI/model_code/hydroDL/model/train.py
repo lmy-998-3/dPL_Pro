@@ -1,0 +1,1752 @@
+import numpy as np
+import torch
+import time
+import os
+import hydroDL
+from hydroDL.model import rnn
+import pandas as pd
+import time  # 需要添加time模块
+from torch.optim.lr_scheduler import _LRScheduler 
+from torch.optim import lr_scheduler
+import math
+from torch.optim.lr_scheduler import LambdaLR
+from hydroDL.model import crit
+###default
+# def trainModel(model,
+#                x,
+#                y,
+#                c,
+#                lossFun,
+#                *,
+#                nEpoch=500,
+#                miniBatch=[100, 30],
+#                saveEpoch=100,
+#                saveFolder=None,
+#                mode='seq2seq',
+#                optLr=1,
+#                optRho=0.9,
+#                optWd=0,
+#                lyrMode=0,
+#                scaleTrans=True,
+#                routingModel=False,
+#                lenF=10):
+#     batchSize, rho = miniBatch
+#     # x- input; z - additional input; y - target; c - constant input
+#     if type(x) is tuple or type(x) is list:
+#         x, z = x  
+#     ngrid, nt, nx = x.shape   
+#     if c is not None:  
+#         if type(c) is tuple or type(c) is list:  ## only for VIC LAI factor
+#             est_c, fixed_c = c
+#             nx = nx + est_c.shape[-1] + fixed_c.shape[-1]
+#             fixed_params = True
+#         else:
+#             nx = nx + c.shape[-1]
+#             fixed_params = False  ## only for VIC LAI factor
+
+#     nIterEp = int(     
+#         np.ceil(np.log(0.01) / np.log(1 - batchSize * rho / ngrid / nt)))
+
+#     if hasattr(model, 'ctRm'):   
+#         if model.ctRm is True:
+#             nIterEp = int(
+#                 np.ceil(
+#                     np.log(0.01) / np.log(1 - batchSize *
+#                                           (rho - model.ct) / ngrid / nt)))
+
+#     if torch.cuda.is_available():
+#         lossFun = lossFun.cuda()
+#         model = model.cuda()
+
+#     # optim = torch.optim.Adadelta(model.parameters()) 
+#     optim = torch.optim.Adadelta(model.parameters(), lr=optLr, rho=optRho, weight_decay=optWd)
+
+#     model.zero_grad()
+#     if saveFolder is not None:
+#         runFile = os.path.join(saveFolder, 'run.csv')
+#         rf = open(runFile, 'w+')
+#     for iEpoch in range(1, nEpoch + 1): 
+#         lossEp = 0
+#         t0 = time.time()
+#         for iIter in range(0, nIterEp):
+#             # training iterations
+#             if type(model) in [rnn.CudnnLstmModel, rnn.AnnModel, rnn.CpuLstmModel]:
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])  
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c)         
+#                 # xTrain = rho/time * Batchsize * Ninput_var
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 # yTrain = rho/time * Batchsize * Ntraget_var
+#                 yP = model(xTrain)
+#             if type(model) in [rnn.CudnnLstmModel_R2P]:  
+#                 # yP = rho/time * Batchsize * Ntraget_var
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c, tupleOut=True)
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 yP, Param_R2P = model(xTrain)
+#             if type(model) in [rnn.LstmCloseModel, rnn.AnnCloseModel, rnn.CNN1dLSTMmodel, rnn.CNN1dLSTMInmodel,
+#                                rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:  
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])   
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c)
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 if type(model) in [rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:
+#                     zTrain = selectSubset(z, iGrid, iT=None, rho=None)
+#                 else:
+#                     zTrain = selectSubset(z, iGrid, iT, rho)
+#                 yP = model(xTrain, zTrain)
+#             if type(model) in [rnn.CudnnLstmModel_Inv]:              
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho]) 
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c, tupleOut=True)   #forcing+rawData
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 zTrain = selectSubset(z, iGrid, iT, rho)  # gap fill for Inv training
+#                 yP1, Param_R2P = model(xTrain, zTrain, lyrMode=lyrMode, scaleTrans=True, routingModel=routingModel, lenF=lenF, fixed_params=fixed_params)
+                
+
+#                 if type(lossFun) in [hydroDL.model.crit.sumOfLoss]: 
+#                     yP = [yP1, Param_R2P]
+#                 else:
+#                     yP = yP1
+
+#             # if type(model) in [hydroDL.model.rnn.LstmCnnCond]:
+#             #     iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+#             #     xTrain = selectSubset(x, iGrid, iT, rho)
+#             #     yTrain = selectSubset(y, iGrid, iT, rho)
+#             #     zTrain = selectSubset(z, iGrid, None, None)
+#             #     yP = model(xTrain, zTrain)
+#             # if type(model) in [hydroDL.model.rnn.LstmCnnForcast]:
+#             #     iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+#             #     xTrain = selectSubset(x, iGrid, iT, rho)
+#             #     yTrain = selectSubset(y, iGrid, iT + model.ct, rho - model.ct)
+#             #     zTrain = selectSubset(z, iGrid, iT, rho)
+#             #     yP = model(xTrain, zTrain)
+#             else:
+#                 Exception('unknown model')
+#             loss = lossFun(yP, yTrain)
+#             loss.backward()
+#             optim.step()
+#             model.zero_grad()
+#             lossEp = lossEp + loss.item()
+#         # print loss
+#         lossEp = lossEp / nIterEp  #每个epoch的平均损失值
+#         logStr = 'Epoch {} Loss {:.3f} time {:.2f}'.format(
+#             iEpoch, lossEp,
+#             time.time() - t0)
+#         print(logStr)
+#         # save model and loss
+#         if saveFolder is not None:
+#             rf.write(logStr + '\n')
+#             if iEpoch % saveEpoch == 0:
+#                 # save model
+#                 modelFile = os.path.join(saveFolder,
+#                                          'model_Ep' + str(iEpoch) + '.pt')
+#                 torch.save(model, modelFile)
+#     if saveFolder is not None:
+#         rf.close()
+#     return model
+
+
+###加入独立范围限制，加入打印总loss和子loss表格化输出，加入csv_name变量名，加入分步下降学习率设置
+# def trainModel(model,
+#                x,
+#                y,
+#                c,
+#                lossFun,
+#                *,
+#                nEpoch=500,
+#                miniBatch=[100, 30],
+#                saveEpoch=100,
+#                saveFolder=None,
+#                mode='seq2seq',
+#                optLr=1,
+#                optRho=0.9,
+#                optWd=0,
+#                lyrMode=0,
+#                scaleTrans=True,
+#                routingModel=False,
+#                lenF=10,
+#                csv_name=None,
+#                lr_milestones=[600, 800, 900],
+#                lr_gamma=0.6,
+#                # ===== 新增：范围张量参数 =====
+#                lb_per_site=None,
+#                ub_per_site=None):
+    
+#     batchSize, rho = miniBatch
+#     # x- input; z - additional input; y - target; c - constant input
+#     if type(x) is tuple or type(x) is list:
+#         x, z = x  
+#     ngrid, nt, nx = x.shape   
+#     if c is not None:  
+#         if type(c) is tuple or type(c) is list:
+#             est_c, fixed_c = c
+#             nx = nx + est_c.shape[-1] + fixed_c.shape[-1]
+#             fixed_params = True
+#         else:
+#             nx = nx + c.shape[-1]
+#             fixed_params = False
+
+#     nIterEp = int(np.ceil(np.log(0.01) / np.log(1 - batchSize * rho / ngrid / nt)))
+
+#     if hasattr(model, 'ctRm'):   
+#         if model.ctRm is True:
+#             nIterEp = int(np.ceil(np.log(0.01) / np.log(1 - batchSize * (rho - model.ct) / ngrid / nt)))
+
+#     if torch.cuda.is_available():
+#         lossFun = lossFun.cuda()
+#         model = model.cuda()
+    
+#     optim = torch.optim.Adadelta(model.parameters(), lr=optLr, rho=optRho, weight_decay=optWd)   
+#     scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=lr_milestones, gamma=lr_gamma)
+    
+#     print(f"学习率调度器设置：初始学习率={optLr}, 下降节点={lr_milestones}, 下降比例={lr_gamma}")
+
+#     model.zero_grad()
+#     if saveFolder is not None:
+#         if csv_name is None:
+#             csv_name = 'run'
+#         runFile = os.path.join(saveFolder, csv_name + '.csv')
+#         rf = open(runFile, 'w+')
+        
+#         # 写入CSV表头
+#         if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+#             rf.write('Epoch,Total_Loss,RmseLoss,RangeBoundLoss,Time\n')
+#         else:
+#             rf.write('Epoch,Loss,Time\n')
+    
+#     for iEpoch in range(1, nEpoch + 1): 
+#         lossEp = 0
+#         lossEp1 = 0
+#         lossEp2 = 0
+#         t0 = time.time()
+#         current_lr = optim.param_groups[0]['lr']
+        
+#         for iIter in range(0, nIterEp):
+#             if type(model) in [rnn.CudnnLstmModel, rnn.AnnModel, rnn.CpuLstmModel]:
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])  
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c)         
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 yP = model(xTrain)
+#                 loss = lossFun(yP, yTrain)
+                
+#             elif type(model) in [rnn.CudnnLstmModel_R2P]:  
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c, tupleOut=True)
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 yP, Param_R2P = model(xTrain)
+#                 loss = lossFun(yP, yTrain)
+                
+#             elif type(model) in [rnn.LstmCloseModel, rnn.AnnCloseModel, rnn.CNN1dLSTMmodel, rnn.CNN1dLSTMInmodel,
+#                                rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:  
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])   
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c)
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 if type(model) in [rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:
+#                     zTrain = selectSubset(z, iGrid, iT=None, rho=None)
+#                 else:
+#                     zTrain = selectSubset(z, iGrid, iT, rho)
+#                 yP = model(xTrain, zTrain)
+#                 loss = lossFun(yP, yTrain)
+                
+#             elif type(model) in [rnn.CudnnLstmModel_Inv]:              
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho]) 
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c, tupleOut=True)
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 zTrain = selectSubset(z, iGrid, iT, rho)
+                
+#                 # 获取批次范围约束
+#                 if lb_per_site is not None and ub_per_site is not None:
+#                     lb_batch = lb_per_site[iGrid]
+#                     ub_batch = ub_per_site[iGrid]
+#                 else:
+#                     lb_batch = None
+#                     ub_batch = None
+                
+#                 yP1, Param_R2P = model(xTrain, zTrain, lyrMode=lyrMode, scaleTrans=True, 
+#                                        routingModel=routingModel, lenF=lenF, fixed_params=fixed_params)
+                
+#                 if type(lossFun) in [hydroDL.model.crit.sumOfLoss]: 
+#                     yP = [yP1, Param_R2P]
+#                 else:
+#                     yP = yP1
+
+#                 # 损失计算
+#                 if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+#                     if lb_batch is not None and ub_batch is not None:
+#                         loss_total = lossFun(yP, yTrain, lb_batch, ub_batch)
+#                     else:
+#                         loss_total = lossFun(yP, yTrain)
+#                     loss1 = lossFun.lossFuncs[0](yP[0], yTrain)
+#                     if lb_batch is not None and ub_batch is not None:
+#                         loss2 = lossFun.lossFuncs[1](yP[1], lb_batch, ub_batch)
+#                     else:
+#                         loss2 = lossFun.lossFuncs[1](yP[1], yTrain)
+                    
+#                     loss = loss_total
+#                     lossEp1 += loss1.item()
+#                     lossEp2 += loss2.item()
+#                 else:
+#                     loss = lossFun(yP, yTrain)
+#             else:
+#                 raise Exception('unknown model')
+            
+#             loss.backward()
+#             optim.step()
+#             model.zero_grad()
+#             lossEp += loss.item()
+
+#         scheduler.step()
+        
+#         new_lr = optim.param_groups[0]['lr']
+#         if new_lr != current_lr:
+#             print(f"Epoch {iEpoch}: 学习率从 {current_lr:.6f} 下降到 {new_lr:.6f}")
+        
+#         lossEp = lossEp / nIterEp
+#         elapsed_time = time.time() - t0
+        
+#         # 表格化输出和保存
+#         if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+#             lossEp1 = lossEp1 / nIterEp if nIterEp > 0 else 0
+#             lossEp2 = lossEp2 / nIterEp if nIterEp > 0 else 0
+            
+#             logStr = f'Epoch {iEpoch} Total_Loss {lossEp:.3f} RmseLoss {lossEp1:.3f} RangeBoundLoss {lossEp2:.3f} time {elapsed_time:.2f}'
+#             print(logStr)
+            
+#             if saveFolder is not None:
+#                 rf.write(f'{iEpoch},{lossEp:.3f},{lossEp1:.3f},{lossEp2:.3f},{elapsed_time:.2f}\n')
+#         else:
+#             logStr = f'Epoch {iEpoch} Loss {lossEp:.3f} time {elapsed_time:.2f}'
+#             print(logStr)
+            
+#             if saveFolder is not None:
+#                 rf.write(f'{iEpoch},{lossEp:.3f},{elapsed_time:.2f}\n')
+        
+#         if saveFolder is not None:
+#             if iEpoch % saveEpoch == 0:
+#                 modelFile = os.path.join(saveFolder, 'model_Ep' + str(iEpoch) + '.pt')
+#                 torch.save(model, modelFile)
+    
+#     if saveFolder is not None:
+#         rf.close()
+#     return model
+
+
+class CosineAnnealingWarmupLR(_LRScheduler):
+    """带线性预热的余弦退火学习率调度器"""
+    def __init__(self, optimizer, warmup_epochs, T_max, eta_min=0, warmup_start_lr=0, last_epoch=-1):
+        self.warmup_epochs = warmup_epochs
+        self.T_max = T_max
+        self.eta_min = eta_min
+        self.warmup_start_lr = warmup_start_lr
+        super(CosineAnnealingWarmupLR, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        if self.last_epoch < self.warmup_epochs:
+            alpha = self.last_epoch / max(1, self.warmup_epochs)
+            return [self.warmup_start_lr + (base_lr - self.warmup_start_lr) * alpha 
+                    for base_lr in self.base_lrs]
+        else:
+            progress = (self.last_epoch - self.warmup_epochs) / max(1, self.T_max)
+            cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
+            return [self.eta_min + (base_lr - self.eta_min) * cosine_decay 
+                    for base_lr in self.base_lrs]
+        
+def create_cosine_warmup_scheduler(optimizer, warmup_epochs, T_max, eta_min=0, warmup_start_lr=0):
+    """
+    创建带预热的余弦退火调度器
+    
+    Args:
+        optimizer: PyTorch优化器
+        warmup_epochs: 预热阶段的epoch数
+        T_max: 余弦退火的总epoch数（不包括预热阶段）
+        eta_min: 最小学习率（相对于初始学习率的比例）
+        warmup_start_lr: 预热开始时的学习率（相对于初始学习率的比例）
+    """
+    # 获取初始学习率
+    base_lr = optimizer.param_groups[0]['lr']
+    
+    # 计算相对比例
+    eta_min_ratio = eta_min / base_lr if base_lr > 0 else 0
+    warmup_start_ratio = warmup_start_lr / base_lr if base_lr > 0 else 0
+    
+    def lr_lambda(epoch):
+        if epoch < warmup_epochs:
+            # 线性预热阶段
+            if warmup_epochs > 0:
+                alpha = epoch / warmup_epochs
+            else:
+                alpha = 1.0
+            return warmup_start_ratio + (1.0 - warmup_start_ratio) * alpha
+        else:
+            # 余弦退火阶段
+            if T_max > 0:
+                progress = min(1.0, (epoch - warmup_epochs) / T_max)
+            else:
+                progress = 1.0
+            cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
+            return eta_min_ratio + (1.0 - eta_min_ratio) * cosine_decay
+    
+    return LambdaLR(optimizer, lr_lambda)
+        
+# def trainModel(model,
+#                x,
+#                y,
+#                c,
+#                lossFun,
+#                *,
+#                nEpoch=500,
+#                miniBatch=[100, 30],
+#                saveEpoch=100,
+#                saveFolder=None,
+#                mode='seq2seq',
+#                optLr=1,
+#                optRho=0.9,
+#                optWd=0,
+#                lyrMode=0,
+#                scaleTrans=True,
+#                routingModel=False,
+#                lenF=10,
+#                csv_name=None,
+#                # ===== 新增：优化器和调度器参数 =====
+#                optimizer_type='adam',          # 'adam' 或 'adadelta'
+#                scheduler_type='cosine_warmup', # 'cosine', 'cosine_warmup', 'cosine_warmrestart', 'none'
+#                T_max=None,                     # 余弦退火周期
+#                eta_min=0,                      # 最小学习率
+#                warmup_epochs=0,                # 预热epoch数（用于cosine_warmup）
+#                T_0=None,                       # 重启周期（用于cosine_warmrestart）
+#                T_mult=2,                       # 周期倍增因子（用于cosine_warmrestart）
+#                # ===== 范围张量参数 =====
+#                lb_per_site=None,
+#                ub_per_site=None):
+    
+#     batchSize, rho = miniBatch
+#     # x- input; z - additional input; y - target; c - constant input
+#     if type(x) is tuple or type(x) is list:
+#         x, z = x  
+#     ngrid, nt, nx = x.shape   
+#     if c is not None:  
+#         if type(c) is tuple or type(c) is list:
+#             est_c, fixed_c = c
+#             nx = nx + est_c.shape[-1] + fixed_c.shape[-1]
+#             fixed_params = True
+#         else:
+#             nx = nx + c.shape[-1]
+#             fixed_params = False
+
+#     nIterEp = int(np.ceil(np.log(0.01) / np.log(1 - batchSize * rho / ngrid / nt)))
+
+#     if hasattr(model, 'ctRm'):   
+#         if model.ctRm is True:
+#             nIterEp = int(np.ceil(np.log(0.01) / np.log(1 - batchSize * (rho - model.ct) / ngrid / nt)))
+
+#     if torch.cuda.is_available():
+#         lossFun = lossFun.cuda()
+#         model = model.cuda()
+    
+#     # ===== 根据类型选择优化器 =====
+#     if optimizer_type == 'adam':
+#         optim = torch.optim.Adam(
+#             model.parameters(), 
+#             lr=optLr, 
+#             weight_decay=optWd,
+#             betas=(0.9, 0.999),  # Adam的动量参数
+#             eps=1e-8
+#         )
+#         print(f"✓ 使用Adam优化器，初始学习率: {optLr}, 权重衰减: {optWd}")
+        
+#     elif optimizer_type == 'adadelta':
+#         optim = torch.optim.Adadelta(
+#             model.parameters(), 
+#             lr=optLr, 
+#             rho=optRho, 
+#             weight_decay=optWd
+#         )
+#         print(f"✓ 使用Adadelta优化器，初始学习率: {optLr}")
+        
+#         # 对Adadelta显示警告
+#         if scheduler_type not in ['none', None]:
+#             print("⚠ 警告：余弦退火调度器通常不适用于Adadelta优化器")
+#             print("  建议使用 scheduler_type='none' 或改用Adam优化器")
+#     else:
+#         raise ValueError(f"不支持的优化器类型: {optimizer_type}，请使用 'adam' 或 'adadelta'")
+    
+#     # ===== 根据类型选择学习率调度器 =====
+#     if scheduler_type == 'cosine':
+#         if T_max is None:
+#             T_max = nEpoch
+#         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+#             optim, T_max=T_max, eta_min=eta_min
+#         )
+#         print(f"✓ 使用余弦退火调度器：T_max={T_max}, eta_min={eta_min}")
+        
+#     elif scheduler_type == 'cosine_warmup':
+#         if T_max is None:
+#             T_max = nEpoch - warmup_epochs
+        
+#         # 使用LambdaLR实现（更稳定，避免get_lr边界问题）
+#         scheduler = create_cosine_warmup_scheduler(
+#             optim, 
+#             warmup_epochs=warmup_epochs,
+#             T_max=T_max, 
+#             eta_min=eta_min,
+#             warmup_start_lr=0
+#         )
+#         print(f"✓ 使用带预热的余弦退火调度器（LambdaLR实现）：")
+#         print(f"  预热epoch: {warmup_epochs}, 余弦周期: {T_max}, 最小学习率: {eta_min}")
+        
+#     elif scheduler_type == 'cosine_warmrestart':
+#         if T_0 is None:
+#             T_0 = nEpoch // 3
+#         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+#             optim, T_0=T_0, T_mult=T_mult, eta_min=eta_min
+#         )
+#         print(f"✓ 使用余弦退火重启调度器：T_0={T_0}, T_mult={T_mult}, eta_min={eta_min}")
+        
+#     elif scheduler_type == 'none' or scheduler_type is None:
+#         scheduler = None
+#         print("✓ 不使用学习率调度器")
+        
+#     else:
+#         raise ValueError(f"不支持的调度器类型: {scheduler_type}")
+    
+#     model.zero_grad()
+#     if saveFolder is not None:
+#         if csv_name is None:
+#             csv_name = 'run'
+#         runFile = os.path.join(saveFolder, csv_name + '.csv')
+#         rf = open(runFile, 'w+')
+        
+#         # ===== CSV表头：包含所有详细损失 =====
+#         # 根据你的10个目标变量：'e', 'ro', 'SM_1','SM_2','SM_3','SM_4','ST_1','ST_2','ST_3','ST_4'
+#         if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+#             # 总损失、RMSE损失、Range损失
+#             header = 'Epoch,Total_Loss,RmseLoss,RangeBoundLoss,'
+#             # 每个变量的RMSE损失
+#             header += 'ET_RMSE,Runoff_RMSE,'
+#             header += 'SM1_RMSE,SM2_RMSE,SM3_RMSE,SM4_RMSE,'
+#             header += 'ST1_RMSE,ST2_RMSE,ST3_RMSE,ST4_RMSE,'
+#             # 每个变量的Range损失（参数反演的，这里填0或实际计算）
+#             header += 'ET_Range,Runoff_Range,'
+#             header += 'SM1_Range,SM2_Range,SM3_Range,SM4_Range,'
+#             header += 'ST1_Range,ST2_Range,ST3_Range,ST4_Range,'
+#             header += 'Time,LR\n'
+#         else:
+#             header = 'Epoch,Total_Loss,'
+#             header += 'ET_RMSE,Runoff_RMSE,'
+#             header += 'SM1_RMSE,SM2_RMSE,SM3_RMSE,SM4_RMSE,'
+#             header += 'ST1_RMSE,ST2_RMSE,ST3_RMSE,ST4_RMSE,'
+#             header += 'Time,LR\n'
+#         rf.write(header)
+    
+#     # ===== 定义变量索引映射 =====
+#     # 目标变量顺序：['e', 'ro', 'SM_1','SM_2','SM_3','SM_4','ST_1','ST_2','ST_3','ST_4']
+#     var_indices = {
+#         'ET': 0,
+#         'Runoff': 1,
+#         'SM1': 2, 'SM2': 3, 'SM3': 4, 'SM4': 5,
+#         'ST1': 6, 'ST2': 7, 'ST3': 8, 'ST4': 9
+#     }
+    
+#     for iEpoch in range(1, nEpoch + 1): 
+#         # 初始化累积损失
+#         lossEp = 0
+#         lossEp1 = 0  # 总RMSE损失
+#         lossEp2 = 0  # 总Range损失
+        
+#         # 每个变量的RMSE损失
+#         var_rmse_losses = {
+#             'ET': 0, 'Runoff': 0,
+#             'SM1': 0, 'SM2': 0, 'SM3': 0, 'SM4': 0,
+#             'ST1': 0, 'ST2': 0, 'ST3': 0, 'ST4': 0
+#         }
+        
+#         # 每个变量的Range损失（参数反演的，暂不细分）
+#         var_range_losses = {
+#             'ET': 0, 'Runoff': 0,
+#             'SM1': 0, 'SM2': 0, 'SM3': 0, 'SM4': 0,
+#             'ST1': 0, 'ST2': 0, 'ST3': 0, 'ST4': 0
+#         }
+        
+#         t0 = time.time()
+#         current_lr = optim.param_groups[0]['lr']
+        
+#         for iIter in range(0, nIterEp):
+#             if type(model) in [rnn.CudnnLstmModel, rnn.AnnModel, rnn.CpuLstmModel]:
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])  
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c)         
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 yP = model(xTrain)
+#                 loss = lossFun(yP, yTrain)
+                
+#                 # 计算每个变量的RMSE损失
+#                 with torch.no_grad():
+#                     for var_name, var_idx in var_indices.items():
+#                         var_pred = yP[:, :, var_idx:var_idx+1]
+#                         var_target = yTrain[:, :, var_idx:var_idx+1]
+#                         var_loss = lossFun.lossFuncs[0](var_pred, var_target) if hasattr(lossFun, 'lossFuncs') else crit.RmseLoss()(var_pred, var_target)
+#                         var_rmse_losses[var_name] += var_loss.item()
+                
+#             elif type(model) in [rnn.CudnnLstmModel_R2P]:  
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c, tupleOut=True)
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 yP, Param_R2P = model(xTrain)
+#                 loss = lossFun(yP, yTrain)
+                
+#                 # 计算每个变量的RMSE损失
+#                 with torch.no_grad():
+#                     for var_name, var_idx in var_indices.items():
+#                         var_pred = yP[:, :, var_idx:var_idx+1]
+#                         var_target = yTrain[:, :, var_idx:var_idx+1]
+#                         var_loss = lossFun.lossFuncs[0](var_pred, var_target) if hasattr(lossFun, 'lossFuncs') else crit.RmseLoss()(var_pred, var_target)
+#                         var_rmse_losses[var_name] += var_loss.item()
+                
+#             elif type(model) in [rnn.LstmCloseModel, rnn.AnnCloseModel, rnn.CNN1dLSTMmodel, rnn.CNN1dLSTMInmodel,
+#                                rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:  
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])   
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c)
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 if type(model) in [rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:
+#                     zTrain = selectSubset(z, iGrid, iT=None, rho=None)
+#                 else:
+#                     zTrain = selectSubset(z, iGrid, iT, rho)
+#                 yP = model(xTrain, zTrain)
+#                 loss = lossFun(yP, yTrain)
+                
+#                 # 计算每个变量的RMSE损失
+#                 with torch.no_grad():
+#                     for var_name, var_idx in var_indices.items():
+#                         var_pred = yP[:, :, var_idx:var_idx+1]
+#                         var_target = yTrain[:, :, var_idx:var_idx+1]
+#                         var_loss = lossFun.lossFuncs[0](var_pred, var_target) if hasattr(lossFun, 'lossFuncs') else crit.RmseLoss()(var_pred, var_target)
+#                         var_rmse_losses[var_name] += var_loss.item()
+                
+#             elif type(model) in [rnn.CudnnLstmModel_Inv]:              
+#                 iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho]) 
+#                 xTrain = selectSubset(x, iGrid, iT, rho, c=c, tupleOut=True)
+#                 yTrain = selectSubset(y, iGrid, iT, rho)
+#                 zTrain = selectSubset(z, iGrid, iT, rho)
+                
+#                 # 获取批次范围约束
+#                 if lb_per_site is not None and ub_per_site is not None:
+#                     lb_batch = lb_per_site[iGrid]
+#                     ub_batch = ub_per_site[iGrid]
+#                 else:
+#                     lb_batch = None
+#                     ub_batch = None
+                
+#                 yP1, Param_R2P = model(xTrain, zTrain, lyrMode=lyrMode, scaleTrans=True, 
+#                                        routingModel=routingModel, lenF=lenF, fixed_params=fixed_params)
+                
+#                 if type(lossFun) in [hydroDL.model.crit.sumOfLoss]: 
+#                     yP = [yP1, Param_R2P]
+#                 else:
+#                     yP = yP1
+
+#                 # 损失计算
+#                 if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+#                     if lb_batch is not None and ub_batch is not None:
+#                         loss_total = lossFun(yP, yTrain, lb_batch, ub_batch)
+#                     else:
+#                         loss_total = lossFun(yP, yTrain)
+                    
+#                     # 总RMSE损失
+#                     loss1 = lossFun.lossFuncs[0](yP[0], yTrain)
+                    
+#                     # 总Range损失
+#                     if lb_batch is not None and ub_batch is not None:
+#                         loss2 = lossFun.lossFuncs[1](yP[1], lb_batch, ub_batch)
+#                     else:
+#                         loss2 = lossFun.lossFuncs[1](yP[1], yTrain)
+                    
+#                     loss = loss_total
+#                     lossEp1 += loss1.item()
+#                     lossEp2 += loss2.item()
+                    
+#                     # ===== 计算每个变量的详细损失 =====
+#                     with torch.no_grad():
+#                         for var_name, var_idx in var_indices.items():
+#                             # 每个变量的RMSE损失
+#                             var_pred = yP[0][:, :, var_idx:var_idx+1]
+#                             var_target = yTrain[:, :, var_idx:var_idx+1]
+#                             var_rmse = lossFun.lossFuncs[0](var_pred, var_target)
+#                             var_rmse_losses[var_name] += var_rmse.item()
+#                 else:
+#                     loss = lossFun(yP, yTrain)
+                    
+#                     # 计算每个变量的RMSE损失
+#                     with torch.no_grad():
+#                         for var_name, var_idx in var_indices.items():
+#                             var_pred = yP[:, :, var_idx:var_idx+1]
+#                             var_target = yTrain[:, :, var_idx:var_idx+1]
+#                             var_loss = lossFun(var_pred, var_target) if not hasattr(lossFun, 'lossFuncs') else lossFun.lossFuncs[0](var_pred, var_target)
+#                             var_rmse_losses[var_name] += var_loss.item()
+#             else:
+#                 raise Exception('unknown model')
+            
+#             loss.backward()
+#             optim.step()
+#             model.zero_grad()
+#             lossEp += loss.item()
+
+#         # ===== 更新学习率 =====
+#         if scheduler is not None:
+#             scheduler.step()
+#             new_lr = optim.param_groups[0]['lr']
+#             if new_lr != current_lr and abs(new_lr - current_lr) > 1e-10:
+#                 print(f"Epoch {iEpoch}: 学习率从 {current_lr:.6f} 调整到 {new_lr:.6f}")
+        
+#         # ===== 平均化所有损失 =====
+#         lossEp = lossEp / nIterEp
+#         lossEp1 = lossEp1 / nIterEp if nIterEp > 0 else 0
+#         lossEp2 = lossEp2 / nIterEp if nIterEp > 0 else 0
+        
+#         # 平均化每个变量的RMSE损失
+#         for var_name in var_rmse_losses:
+#             var_rmse_losses[var_name] /= nIterEp
+        
+#         # 平均化每个变量的Range损失
+#         for var_name in var_range_losses:
+#             var_range_losses[var_name] /= nIterEp
+        
+#         elapsed_time = time.time() - t0
+        
+#         # ===== 打印详细损失信息 =====
+#         current_lr = optim.param_groups[0]['lr']
+        
+#         # 构建详细损失字符串
+#         logStr = f'Epoch {iEpoch} '
+#         logStr += f'Total {lossEp:.4f} '
+#         logStr += f'RMSE {lossEp1:.4f} '
+#         if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+#             logStr += f'Range {lossEp2:.4f} '
+#         logStr += f'| ET {var_rmse_losses["ET"]:.4f} '
+#         logStr += f'Ro {var_rmse_losses["Runoff"]:.4f} '
+#         logStr += f'SM1 {var_rmse_losses["SM1"]:.4f} SM2 {var_rmse_losses["SM2"]:.4f} '
+#         logStr += f'SM3 {var_rmse_losses["SM3"]:.4f} SM4 {var_rmse_losses["SM4"]:.4f} '
+#         logStr += f'ST1 {var_rmse_losses["ST1"]:.4f} ST2 {var_rmse_losses["ST2"]:.4f} '
+#         logStr += f'ST3 {var_rmse_losses["ST3"]:.4f} ST4 {var_rmse_losses["ST4"]:.4f} '
+#         logStr += f'| time {elapsed_time:.1f}s lr {current_lr:.6e}'
+#         print(logStr)
+        
+#         # ===== 写入CSV文件 =====
+#         if saveFolder is not None:
+#             if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+#                 # 写入总损失
+#                 rf.write(f'{iEpoch},{lossEp:.6f},{lossEp1:.6f},{lossEp2:.6f},')
+#                 # 写入每个变量的RMSE损失
+#                 rf.write(f'{var_rmse_losses["ET"]:.6f},{var_rmse_losses["Runoff"]:.6f},')
+#                 rf.write(f'{var_rmse_losses["SM1"]:.6f},{var_rmse_losses["SM2"]:.6f},{var_rmse_losses["SM3"]:.6f},{var_rmse_losses["SM4"]:.6f},')
+#                 rf.write(f'{var_rmse_losses["ST1"]:.6f},{var_rmse_losses["ST2"]:.6f},{var_rmse_losses["ST3"]:.6f},{var_rmse_losses["ST4"]:.6f},')
+#                 # 写入每个变量的Range损失（暂时都用0，需要根据实际情况调整）
+#                 rf.write(f'{var_range_losses["ET"]:.6f},{var_range_losses["Runoff"]:.6f},')
+#                 rf.write(f'{var_range_losses["SM1"]:.6f},{var_range_losses["SM2"]:.6f},{var_range_losses["SM3"]:.6f},{var_range_losses["SM4"]:.6f},')
+#                 rf.write(f'{var_range_losses["ST1"]:.6f},{var_range_losses["ST2"]:.6f},{var_range_losses["ST3"]:.6f},{var_range_losses["ST4"]:.6f},')
+#                 rf.write(f'{elapsed_time:.2f},{current_lr:.6e}\n')
+#             else:
+#                 # 写入总损失
+#                 rf.write(f'{iEpoch},{lossEp:.6f},')
+#                 # 写入每个变量的RMSE损失
+#                 rf.write(f'{var_rmse_losses["ET"]:.6f},{var_rmse_losses["Runoff"]:.6f},')
+#                 rf.write(f'{var_rmse_losses["SM1"]:.6f},{var_rmse_losses["SM2"]:.6f},{var_rmse_losses["SM3"]:.6f},{var_rmse_losses["SM4"]:.6f},')
+#                 rf.write(f'{var_rmse_losses["ST1"]:.6f},{var_rmse_losses["ST2"]:.6f},{var_rmse_losses["ST3"]:.6f},{var_rmse_losses["ST4"]:.6f},')
+#                 rf.write(f'{elapsed_time:.2f},{current_lr:.6e}\n')
+            
+#             # 定期刷新文件缓冲区
+#             if iEpoch % 10 == 0:
+#                 rf.flush()
+        
+#         if saveFolder is not None:
+#             if iEpoch % saveEpoch == 0:
+#                 modelFile = os.path.join(saveFolder, 'model_Ep' + str(iEpoch) + '.pt')
+#                 torch.save(model, modelFile)
+#                 print(f'  ✓ 模型保存至: {modelFile}')
+    
+#     if saveFolder is not None:
+#         rf.close()
+#         print(f'训练完成，损失记录已保存至: {runFile}')
+#     return model
+
+###### adapt apl_ggg
+def trainModel(model,
+               x,
+               y,
+               c,
+               lossFun,
+               *,
+               nEpoch=500,
+               miniBatch=[100, 30],
+               saveEpoch=100,
+               saveFolder=None,
+               mode='seq2seq',
+               optLr=1,
+               optRho=0.9,
+               optWd=0,
+               lyrMode=0,
+               scaleTrans=True,
+               routingModel=False,
+               lenF=10,
+               csv_name=None,
+               optimizer_type='adam',
+               scheduler_type='cosine_warmup',
+               T_max=None,
+               eta_min=0,
+               warmup_epochs=0,
+               T_0=None,
+               T_mult=2,
+               lb_per_site=None,
+               ub_per_site=None):
+
+    batchSize, rho = miniBatch
+
+    if type(x) is tuple or type(x) is list:
+        x, z = x
+
+    ngrid, nt, nx = x.shape
+
+    fixed_params = False
+    if c is not None:
+        if type(c) is tuple or type(c) is list:
+            est_c, fixed_c = c
+            nx = nx + est_c.shape[-1] + fixed_c.shape[-1]
+            fixed_params = True
+        else:
+            nx = nx + c.shape[-1]
+            fixed_params = False
+
+    # ===== 根据目标变量个数确定日志变量名 =====
+    ny = y.shape[-1]
+    if ny == 2:
+        var_names = ['SM1', 'ST1']
+    elif ny == 4:
+        var_names = ['ET', 'Runoff', 'SM1', 'ST1']
+    elif ny == 6:
+        var_names = ['ET', 'Runoff', 'SM1', 'SM2', 'ST1', 'ST2']
+    elif ny == 8:
+        var_names = ['ET', 'Runoff', 'SM1', 'SM2', 'SM3', 'SM4', 'ST1', 'ST2']
+    elif ny == 10:
+        var_names = ['ET', 'Runoff', 'SM1', 'SM2', 'SM3', 'SM4', 'ST1', 'ST2', 'ST3', 'ST4']
+    else:
+        var_names = [f'Var_{i}' for i in range(ny)]
+
+    var_indices = {name: idx for idx, name in enumerate(var_names)}
+
+    print(f"检测到目标变量数量: {ny}")
+    print(f"变量名称: {var_names}")
+
+    nIterEp = int(np.ceil(np.log(0.01) / np.log(1 - batchSize * rho / ngrid / nt)))
+
+    if hasattr(model, 'ctRm'):
+        if model.ctRm is True:
+            nIterEp = int(
+                np.ceil(np.log(0.01) / np.log(1 - batchSize * (rho - model.ct) / ngrid / nt))
+            )
+
+    if torch.cuda.is_available():
+        lossFun = lossFun.cuda()
+        model = model.cuda()
+
+    # ===== optimizer =====
+    if optimizer_type == 'adam':
+        optim = torch.optim.Adam(
+            model.parameters(),
+            lr=optLr,
+            weight_decay=optWd,
+            betas=(0.9, 0.999),
+            eps=1e-8
+        )
+        print(f"使用Adam优化器，初始学习率: {optLr}, 权重衰减: {optWd}")
+
+    elif optimizer_type == 'adadelta':
+        optim = torch.optim.Adadelta(
+            model.parameters(),
+            lr=optLr,
+            rho=optRho,
+            weight_decay=optWd
+        )
+        print(f"使用Adadelta优化器，初始学习率: {optLr}")
+
+        if scheduler_type not in ['none', None]:
+            print("警告：余弦退火调度器通常不适用于Adadelta优化器")
+            print("建议使用 scheduler_type='none' 或改用Adam优化器")
+    else:
+        raise ValueError(f"不支持的优化器类型: {optimizer_type}，请使用 'adam' 或 'adadelta'")
+
+    # ===== scheduler =====
+    if scheduler_type == 'cosine':
+        if T_max is None:
+            T_max = nEpoch
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optim, T_max=T_max, eta_min=eta_min
+        )
+        print(f"使用余弦退火调度器：T_max={T_max}, eta_min={eta_min}")
+
+    elif scheduler_type == 'cosine_warmup':
+        if T_max is None:
+            T_max = nEpoch - warmup_epochs
+
+        scheduler = create_cosine_warmup_scheduler(
+            optim,
+            warmup_epochs=warmup_epochs,
+            T_max=T_max,
+            eta_min=eta_min,
+            warmup_start_lr=0
+        )
+        print("使用带预热的余弦退火调度器：")
+        print(f"预热epoch: {warmup_epochs}, 余弦周期: {T_max}, 最小学习率: {eta_min}")
+
+    elif scheduler_type == 'cosine_warmrestart':
+        if T_0 is None:
+            T_0 = nEpoch // 3
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optim, T_0=T_0, T_mult=T_mult, eta_min=eta_min
+        )
+        print(f"使用余弦退火重启调度器：T_0={T_0}, T_mult={T_mult}, eta_min={eta_min}")
+
+    elif scheduler_type == 'none' or scheduler_type is None:
+        scheduler = None
+        print("不使用学习率调度器")
+
+    else:
+        raise ValueError(f"不支持的调度器类型: {scheduler_type}")
+
+    if hasattr(lossFun, 'lossFuncs'):
+        rmse_func = lossFun.lossFuncs[0]
+    else:
+        rmse_func = lossFun
+
+    model.zero_grad()
+
+    if saveFolder is not None:
+        if csv_name is None:
+            csv_name = 'run'
+        runFile = os.path.join(saveFolder, csv_name + '.csv')
+        rf = open(runFile, 'w+')
+
+        if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+            header = 'Epoch,Total_Loss,RmseLoss,RangeBoundLoss,'
+            for var_name in var_names:
+                header += f'{var_name}_RMSE,'
+            header += 'Time,LR\n'
+        else:
+            header = 'Epoch,Total_Loss,'
+            for var_name in var_names:
+                header += f'{var_name}_RMSE,'
+            header += 'Time,LR\n'
+
+        rf.write(header)
+
+    for iEpoch in range(1, nEpoch + 1):
+        lossEp = 0.0
+        lossEp1 = 0.0
+        lossEp2 = 0.0
+        var_rmse_losses = {name: 0.0 for name in var_names}
+
+        t0 = time.time()
+        current_lr = optim.param_groups[0]['lr']
+
+        for iIter in range(0, nIterEp):
+            if type(model) in [rnn.CudnnLstmModel, rnn.AnnModel, rnn.CpuLstmModel]:
+                iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+                xTrain = selectSubset(x, iGrid, iT, rho, c=c)
+                yTrain = selectSubset(y, iGrid, iT, rho)
+                yP = model(xTrain)
+                loss = lossFun(yP, yTrain)
+
+                with torch.no_grad():
+                    for var_name, var_idx in var_indices.items():
+                        var_pred = yP[:, :, var_idx:var_idx + 1]
+                        var_target = yTrain[:, :, var_idx:var_idx + 1]
+                        var_loss = rmse_func(var_pred, var_target)
+                        var_rmse_losses[var_name] += var_loss.item() if torch.is_tensor(var_loss) else float(var_loss)
+
+            elif type(model) in [rnn.CudnnLstmModel_R2P]:
+                iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+                xTrain = selectSubset(x, iGrid, iT, rho, c=c, tupleOut=True)
+                yTrain = selectSubset(y, iGrid, iT, rho)
+                yP, Param_R2P = model(xTrain)
+                loss = lossFun(yP, yTrain)
+
+                with torch.no_grad():
+                    for var_name, var_idx in var_indices.items():
+                        var_pred = yP[:, :, var_idx:var_idx + 1]
+                        var_target = yTrain[:, :, var_idx:var_idx + 1]
+                        var_loss = rmse_func(var_pred, var_target)
+                        var_rmse_losses[var_name] += var_loss.item() if torch.is_tensor(var_loss) else float(var_loss)
+
+            elif type(model) in [
+                rnn.LstmCloseModel, rnn.AnnCloseModel, rnn.CNN1dLSTMmodel,
+                rnn.CNN1dLSTMInmodel, rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel
+            ]:
+                iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+                xTrain = selectSubset(x, iGrid, iT, rho, c=c)
+                yTrain = selectSubset(y, iGrid, iT, rho)
+
+                if type(model) in [rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:
+                    zTrain = selectSubset(z, iGrid, iT=None, rho=None)
+                else:
+                    zTrain = selectSubset(z, iGrid, iT, rho)
+
+                yP = model(xTrain, zTrain)
+                loss = lossFun(yP, yTrain)
+
+                with torch.no_grad():
+                    for var_name, var_idx in var_indices.items():
+                        var_pred = yP[:, :, var_idx:var_idx + 1]
+                        var_target = yTrain[:, :, var_idx:var_idx + 1]
+                        var_loss = rmse_func(var_pred, var_target)
+                        var_rmse_losses[var_name] += var_loss.item() if torch.is_tensor(var_loss) else float(var_loss)
+
+            elif type(model) in [rnn.CudnnLstmModel_Inv]:
+                iGrid, iT = randomIndex(ngrid, nt, [batchSize, rho])
+                xTrain = selectSubset(x, iGrid, iT, rho, c=c, tupleOut=True)
+                yTrain = selectSubset(y, iGrid, iT, rho)
+                zTrain = selectSubset(z, iGrid, iT, rho)
+
+                if lb_per_site is not None and ub_per_site is not None:
+                    lb_batch = lb_per_site[iGrid]
+                    ub_batch = ub_per_site[iGrid]
+                else:
+                    lb_batch = None
+                    ub_batch = None
+
+                yP1, Param_R2P = model(
+                    xTrain,
+                    zTrain,
+                    lyrMode=lyrMode,
+                    scaleTrans=True,
+                    routingModel=routingModel,
+                    lenF=lenF,
+                    fixed_params=fixed_params
+                )
+
+                if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+                    yP = [yP1, Param_R2P]
+                else:
+                    yP = yP1
+
+                if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+                    if lb_batch is not None and ub_batch is not None:
+                        loss_total = lossFun(yP, yTrain, lb_batch, ub_batch)
+                    else:
+                        loss_total = lossFun(yP, yTrain)
+
+                    loss1 = lossFun.lossFuncs[0](yP[0], yTrain)
+
+                    if lb_batch is not None and ub_batch is not None:
+                        loss2 = lossFun.lossFuncs[1](yP[1], lb_batch, ub_batch)
+                    else:
+                        loss2 = lossFun.lossFuncs[1](yP[1], yTrain)
+
+                    loss = loss_total
+                    lossEp1 += loss1.item()
+                    lossEp2 += loss2.item()
+
+                    with torch.no_grad():
+                        for var_name, var_idx in var_indices.items():
+                            var_pred = yP[0][:, :, var_idx:var_idx + 1]
+                            var_target = yTrain[:, :, var_idx:var_idx + 1]
+                            var_rmse = lossFun.lossFuncs[0](var_pred, var_target)
+                            var_rmse_losses[var_name] += var_rmse.item() if torch.is_tensor(var_rmse) else float(var_rmse)
+
+                else:
+                    loss = lossFun(yP, yTrain)
+
+                    with torch.no_grad():
+                        for var_name, var_idx in var_indices.items():
+                            var_pred = yP[:, :, var_idx:var_idx + 1]
+                            var_target = yTrain[:, :, var_idx:var_idx + 1]
+                            var_loss = rmse_func(var_pred, var_target)
+                            var_rmse_losses[var_name] += var_loss.item() if torch.is_tensor(var_loss) else float(var_loss)
+
+            else:
+                raise Exception('unknown model')
+
+            loss.backward()
+            optim.step()
+            model.zero_grad()
+            lossEp += loss.item()
+
+        if scheduler is not None:
+            scheduler.step()
+            new_lr = optim.param_groups[0]['lr']
+            if new_lr != current_lr and abs(new_lr - current_lr) > 1e-10:
+                print(f"Epoch {iEpoch}: 学习率从 {current_lr:.6f} 调整到 {new_lr:.6f}")
+
+        lossEp = lossEp / nIterEp
+        lossEp1 = lossEp1 / nIterEp if nIterEp > 0 else 0
+        lossEp2 = lossEp2 / nIterEp if nIterEp > 0 else 0
+
+        for var_name in var_names:
+            var_rmse_losses[var_name] /= nIterEp
+
+        elapsed_time = time.time() - t0
+        current_lr = optim.param_groups[0]['lr']
+
+        logStr = f'Epoch {iEpoch} '
+        logStr += f'Total {lossEp:.4f} '
+
+        if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+            logStr += f'RMSE {lossEp1:.4f} Range {lossEp2:.4f} '
+        else:
+            logStr += f'RMSE {lossEp:.4f} '
+
+        logStr += '| '
+        for var_name in var_names:
+            logStr += f'{var_name} {var_rmse_losses[var_name]:.4f} '
+
+        logStr += f'| time {elapsed_time:.1f}s lr {current_lr:.6e}'
+        print(logStr)
+
+        if saveFolder is not None:
+            if type(lossFun) in [hydroDL.model.crit.sumOfLoss]:
+                rf.write(f'{iEpoch},{lossEp:.6f},{lossEp1:.6f},{lossEp2:.6f},')
+                for var_name in var_names:
+                    rf.write(f'{var_rmse_losses[var_name]:.6f},')
+                rf.write(f'{elapsed_time:.2f},{current_lr:.6e}\n')
+            else:
+                rf.write(f'{iEpoch},{lossEp:.6f},')
+                for var_name in var_names:
+                    rf.write(f'{var_rmse_losses[var_name]:.6f},')
+                rf.write(f'{elapsed_time:.2f},{current_lr:.6e}\n')
+
+            if iEpoch % 10 == 0:
+                rf.flush()
+
+        if saveFolder is not None:
+            if iEpoch % saveEpoch == 0:
+                modelFile = os.path.join(saveFolder, 'model_Ep' + str(iEpoch) + '.pt')
+                torch.save(model, modelFile)
+                print(f'  模型保存至 {modelFile}')
+
+    if saveFolder is not None:
+        rf.close()
+        print(f'训练完成，损失记录已保存至 {runFile}')
+
+    return model
+
+def compute_validation_loss(model, x_valid, y_valid, c_valid, lossFun, 
+                           batchSize, rho, lyrMode, routingModel, lenF, fixed_params):
+    """复杂模型（CudnnLstmModel_Inv）的验证损失计算"""
+    import numpy as np
+    import torch
+    
+    ngrid, nt, nx = x_valid.shape
+    
+    # 简化处理：使用整个验证集计算损失
+    total_loss = 0.0
+    n_batches = (ngrid + batchSize - 1) // batchSize
+    
+    for i in range(0, ngrid, batchSize):
+        i_end = min(i + batchSize, ngrid)
+        
+        x_batch = x_valid[i:i_end, :, :]
+        y_batch = y_valid[i:i_end, :, :]
+        
+        if c_valid is not None:
+            c_batch = c_valid[i:i_end, :]
+            # 扩展c到时序维度
+            c_expanded = np.repeat(c_batch[:, np.newaxis, :], nt, axis=1)
+            x_combined = np.concatenate([x_batch, c_expanded], axis=2)
+        else:
+            x_combined = x_batch
+        
+        # 转换为tensor
+        x_tensor = torch.from_numpy(np.swapaxes(x_combined, 1, 0)).float()
+        y_tensor = torch.from_numpy(np.swapaxes(y_batch, 1, 0)).float()
+        
+        if torch.cuda.is_available():
+            x_tensor = x_tensor.cuda()
+            y_tensor = y_tensor.cuda()
+        
+        with torch.no_grad():
+            y_pred = model(x_tensor)
+            loss = lossFun(y_pred, y_tensor)
+            total_loss += loss.item() * (i_end - i)
+    
+    return total_loss / ngrid
+
+
+
+
+
+def saveModel(outFolder, model, epoch, modelName='model'):
+    modelFile = os.path.join(outFolder, modelName + '_Ep' + str(epoch) + '.pt')
+    torch.save(model, modelFile)
+
+
+def loadModel(outFolder, epoch, modelName='model'):
+    modelFile = os.path.join(outFolder, modelName + '_Ep' + str(epoch) + '.pt')
+    model = torch.load(modelFile)
+    return model
+
+
+# def testModel(model, x, c, *, batchSize=None, filePathLst=None, doMC=False,
+#               outModel=None, lyrMode=0, savePath=None, scaleTrans=True, routingModel=False, lenF=10):
+#     # outModel, savePath: only for R2P-hymod model, for other models always set None
+#     if type(x) is tuple or type(x) is list:
+#         x, z = x
+#         if type(model) is rnn.CudnnLstmModel_Inv:
+#             if type(x) is tuple or type(x) is list:
+#                 xTrain_temp, xTest_temp = x  
+
+#         if type(model) is rnn.CudnnLstmModel:
+#             # For Cudnn, only one input. First concat inputs and obs
+#             x = np.concatenate([x, z], axis=2)
+#             z = None
+
+#     else:
+#         z = None
+
+#     if type(model) is rnn.CudnnLstmModel_Inv:
+#         ngrid, ntTrain, nx = xTrain_temp.shape
+#         ntTest = xTest_temp.shape[1]
+#     else:
+#         ngrid, nt, nx = x.shape
+
+#     if c is not None:
+#         if type(c) is tuple or type(c) is list:  ## only for VIC LAI factor
+#             est_c, fixed_c = c
+#             nx = nx + est_c.shape[-1] + fixed_c.shape[-1]
+#             nc_est = est_c.shape[-1]
+#             nc_fixed = fixed_c.shape[-1]
+#             fixed_params = True
+#         else:
+#             nx = nx + c.shape[-1]
+#             nc = c.shape[-1]
+#             fixed_params = False
+
+#     ny = model.ny
+#     if batchSize is None:
+#         batchSize = ngrid
+#     if torch.cuda.is_available():
+#         model = model.cuda()
+
+#     model.train(mode=False)
+#     if hasattr(model, 'ctRm'):
+#         if model.ctRm is True:
+#             nt = nt - model.ct
+#     # yP = torch.zeros([nt, ngrid, ny])
+#     iS = np.arange(0, ngrid, batchSize)
+#     iE = np.append(iS[1:], ngrid)
+
+#     # deal with file name to save
+#     if filePathLst is None:
+#         if type(model) in [rnn.CudnnLstmModel_R2P, rnn.CudnnLstmModel_Inv]:
+#             filePathLst = ['out' + str(x) for x in range(ny+1)]
+#         else:
+#             filePathLst = ['out' + str(x) for x in range(ny)]
+#     fLst = list()
+#     for filePath in filePathLst:
+#         if os.path.exists(filePath):
+#             os.remove(filePath)
+#         f = open(filePath, 'a')
+#         fLst.append(f)
+
+#     # forward for each batch
+#     for i in range(0, len(iS)):
+#         # print('batch {}'.format(i)) # temp comment for SCEUA
+#         if type(model) is rnn.CudnnLstmModel_Inv:
+#             xTrainTemp = xTrain_temp[iS[i]:iE[i], :, :]
+#             xTestTemp = xTest_temp[iS[i]:iE[i], :, :]
+#         else:
+#             xTemp = x[iS[i]:iE[i], :, :]
+
+#         if c is not None:
+#             if type(model) is rnn.CudnnLstmModel_Inv:
+#                 if type(c) is tuple or type(c) is list:  ## only for VIC LAI factor
+#                     cTemp_est = np.repeat(
+#                         np.reshape(est_c[iS[i]:iE[i], :], [iE[i] - iS[i], 1, nc_est]), ntTrain, axis=1)
+#                     cTemp_fixed = np.repeat(
+#                         np.reshape(fixed_c[iS[i]:iE[i], :], [iE[i] - iS[i], 1, nc_fixed]), ntTrain, axis=1)
+#                     xTrain_Inv = torch.from_numpy(np.swapaxes(xTrainTemp, 1, 0)).float()
+#                     xTest_Inv = torch.from_numpy(np.swapaxes(xTestTemp, 1, 0)).float()
+#                 else:
+#                     cTemp = np.repeat(
+#                         np.reshape(c[iS[i]:iE[i], :], [iE[i] - iS[i], 1, nc]), ntTrain, axis=1)
+#                     xTrain_Inv = torch.from_numpy(np.swapaxes(xTrainTemp, 1, 0)).float()
+#                     xTest_Inv = torch.from_numpy(np.swapaxes(xTestTemp, 1, 0)).float()
+#             else:
+#                 cTemp = np.repeat(
+#                     np.reshape(c[iS[i]:iE[i], :], [iE[i] - iS[i], 1, nc]), nt, axis=1)
+#                 xTest = torch.from_numpy(
+#                     np.swapaxes(np.concatenate([xTemp, cTemp], 2), 1, 0)).float()
+#         else:
+#             xTest = torch.from_numpy(
+#                 np.swapaxes(xTemp, 1, 0)).float()
+#         if torch.cuda.is_available():
+#             if type(model) is rnn.CudnnLstmModel_Inv:
+#                 xTrain_Inv = xTrain_Inv.cuda()
+#                 xTest_Inv = xTest_Inv.cuda()
+#             else:
+#                 xTest = xTest.cuda()
+#         if z is not None:
+#             if type(model) in [rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:
+#                 zTest = torch.from_numpy(z[iS[i]:iE[i], :]).float()
+#             else:
+#                 zTemp = z[iS[i]:iE[i], :, :]
+#                 zTest = torch.from_numpy(np.swapaxes(zTemp, 1, 0)).float()
+#             if torch.cuda.is_available():
+#                 zTest = zTest.cuda()
+#         if type(model) in [rnn.CudnnLstmModel, rnn.AnnModel, rnn.CpuLstmModel]:
+#             # if z is not None:
+#             #     xTest = torch.cat((xTest, zTest), dim=2)
+#             yP = model(xTest)
+#             if doMC is not False:
+#                 ySS = np.zeros(yP.shape)
+#                 yPnp=yP.detach().cpu().numpy()
+#                 for k in range(doMC):
+#                     # print(k)
+#                     yMC = model(xTest, doDropMC=True).detach().cpu().numpy()
+#                     ySS = ySS+np.square(yMC-yPnp)
+#                 ySS = np.sqrt(ySS)/doMC
+
+#         if type(model) in [rnn.LstmCloseModel, rnn.AnnCloseModel, rnn.CNN1dLSTMmodel, rnn.CNN1dLSTMInmodel,
+#                            rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:
+#             yP = model(xTest, zTest)
+
+#         if type(model) in [hydroDL.model.rnn.LstmCnnForcast]:
+#             yP = model(xTest, zTest)
+
+#         if type(model) in [rnn.CudnnLstmModel_R2P]:
+#             xTemp = torch.from_numpy(np.swapaxes(xTemp,1,0)).float()
+#             cTemp = torch.from_numpy(np.swapaxes(cTemp,1,0)).float()
+#             xTemp = xTemp.cuda()
+#             cTemp = cTemp.cuda()
+#             xTest_tuple = (xTemp, cTemp)
+#             if outModel is None:
+#                 yP, Param_R2P = model(xTest_tuple, outModel = outModel, lyrMode=lyrMode)
+#                 Parameters_R2P = Param_R2P.detach().cpu().numpy().swapaxes(0, 1)
+#             else:
+#                 Param_R2P = model(xTest_tuple, outModel = outModel)
+#                 Parameters_R2P = Param_R2P.detach().cpu().numpy()
+#                 hymod_forcing = xTemp.detach().cpu().numpy().swapaxes(0, 1)
+
+#                 runFile = os.path.join(savePath, 'hymod_run.csv')
+#                 rf = open(runFile, 'a+')
+
+#                 q = torch.zeros(hymod_forcing.shape[0], hymod_forcing.shape[1])
+#                 evap = torch.zeros(hymod_forcing.shape[0], hymod_forcing.shape[1])
+#                 for pix in range(hymod_forcing.shape[0]):
+#                     # model_hymod = rnn.hymod(a=Parameters_R2P[pix,0,0], b=Parameters_R2P[pix,0,1],\
+#                     #     cmax=Parameters_R2P[pix,0,2], rq=Parameters_R2P[pix,0,3],\
+#                     #         rs=Parameters_R2P[pix,0,4], s=Parameters_R2P[pix,0,5],\
+#                     #             slow=Parameters_R2P[pix,0,6],\
+#                     #                 fast=[Parameters_R2P[pix,0,7], Parameters_R2P[pix,0,8], Parameters_R2P[pix,0,9]])
+#                     model_hymod = rnn.hymod(a=Parameters_R2P[pix,0], b=Parameters_R2P[pix,1],\
+#                         cmax=Parameters_R2P[pix,2], rq=Parameters_R2P[pix,3],\
+#                             rs=Parameters_R2P[pix,4], s=Parameters_R2P[pix,5],\
+#                                 slow=Parameters_R2P[pix,6],\
+#                                     fast=[Parameters_R2P[pix,7], Parameters_R2P[pix,8], Parameters_R2P[pix,9]])
+#                     for hymod_t in range(hymod_forcing.shape[1]):
+#                         q[pix, hymod_t], evap[pix, hymod_t] = model_hymod.advance(hymod_forcing[pix,hymod_t,0],hymod_forcing[pix,hymod_t,1])
+#                         nstepsLst = '{:.5f} {:.5f} {:.5f} {:.5f}'.format(hymod_forcing[pix,hymod_t,0], hymod_forcing[pix,hymod_t,1], q[pix,hymod_t], evap[pix,hymod_t])
+#                         print(nstepsLst)
+
+#                         rf.write(nstepsLst + '\n')      
+#         if type(model) in [rnn.CudnnLstmModel_Inv]:
+#             test = True
+
+#             if fixed_params is True:
+#                 cTemp_fixed = torch.from_numpy(np.swapaxes(cTemp_fixed, 1, 0)).float()
+#                 cTemp_fixed = cTemp_fixed.cuda()
+#                 cTemp_est = torch.from_numpy(np.swapaxes(cTemp_est, 1, 0)).float()
+#                 cTemp_est = cTemp_est.cuda()
+#                 xTest_tuple = (xTrain_Inv, xTest_Inv, cTemp_est, cTemp_fixed)
+#             else:
+#                 cTemp = torch.from_numpy(np.swapaxes(cTemp, 1, 0)).float()
+#                 cTemp = cTemp.cuda()
+#                 xTest_tuple = (xTrain_Inv, xTest_Inv, cTemp)
+
+#             yP, Param_R2P = model(xTest_tuple, zTest, testMode=test, outModel=outModel, lyrMode=lyrMode,
+#                                   scaleTrans=True, routingModel=routingModel,
+#                                   lenF=lenF, fixed_params=fixed_params)  # will also send in the y for inversion generator
+
+#         # CP-- marks the beginning of problematic merge
+#         yOut = yP.detach().cpu().numpy().swapaxes(0, 1)
+        
+#         if doMC is not False:
+#             yOutMC = ySS.swapaxes(0, 1)
+
+#         # save output
+#         for k in range(ny):
+#             f = fLst[k]
+#             pd.DataFrame(yOut[:, :, k]).to_csv(f, header=False, index=False)
+#             if type(model) in [rnn.CudnnLstmModel_R2P, rnn.CudnnLstmModel_Inv]:
+#                 Parameters_R2P = Param_R2P.detach().cpu().numpy().swapaxes(0, 1)
+#                 f = fLst[k+1]
+#                 pd.DataFrame(Parameters_R2P[:, 0, :]).to_csv(f, header=False, index=False)
+
+#         if doMC is not False:
+#             for k in range(ny):
+#                 f = fLst[ny+k]
+#                 pd.DataFrame(yOutMC[:, :, k]).to_csv(
+#                     f, header=False, index=False)
+
+#         model.zero_grad()
+#         torch.cuda.empty_cache()
+
+#     for f in fLst:
+#         f.close()
+
+#     if type(model) in [rnn.CudnnLstmModel_R2P, rnn.CudnnLstmModel_Inv]:
+#         Parameters_R2P = torch.from_numpy(Parameters_R2P)
+#         if outModel is None:
+#             # return yOut, Parameters_R2P, a ,b
+#             return yOut, Parameters_R2P
+#         else:
+#             return q, evap, Parameters_R2P
+#     else:
+#         return yOut
+
+##12.25,
+def testModel(model, x, c, *, batchSize=None, filePathLst=None, doMC=False,
+              outModel=None, lyrMode=0, savePath=None, scaleTrans=True, routingModel=False, lenF=10):
+    # outModel, savePath: only for R2P-hymod model, for other models always set None
+    if type(x) is tuple or type(x) is list:
+        x, z = x
+        if type(model) is rnn.CudnnLstmModel_Inv:
+            if type(x) is tuple or type(x) is list:
+                xTrain_temp, xTest_temp = x  
+
+        if type(model) is rnn.CudnnLstmModel:
+            # For Cudnn, only one input. First concat inputs and obs
+            x = np.concatenate([x, z], axis=2)
+            z = None
+
+    else:
+        z = None
+
+    if type(model) is rnn.CudnnLstmModel_Inv:
+        ngrid, ntTrain, nx = xTrain_temp.shape
+        ntTest = xTest_temp.shape[1]
+    else:
+        ngrid, nt, nx = x.shape
+
+    if c is not None:
+        if type(c) is tuple or type(c) is list:  ## only for VIC LAI factor
+            est_c, fixed_c = c
+            nx = nx + est_c.shape[-1] + fixed_c.shape[-1]
+            nc_est = est_c.shape[-1]
+            nc_fixed = fixed_c.shape[-1]
+            fixed_params = True
+        else:
+            nx = nx + c.shape[-1]
+            nc = c.shape[-1]
+            fixed_params = False
+
+    ny = model.ny
+    if batchSize is None:
+        batchSize = ngrid
+    if torch.cuda.is_available():
+        model = model.cuda()
+
+    model.train(mode=False)
+    if hasattr(model, 'ctRm'):
+        if model.ctRm is True:
+            nt = nt - model.ct
+    # yP = torch.zeros([nt, ngrid, ny])
+    iS = np.arange(0, ngrid, batchSize)
+    iE = np.append(iS[1:], ngrid)
+
+    # deal with file name to save
+    if filePathLst is None:
+        if type(model) in [rnn.CudnnLstmModel_R2P, rnn.CudnnLstmModel_Inv]:
+            filePathLst = ['out' + str(x) for x in range(ny+1)]
+        else:
+            filePathLst = ['out' + str(x) for x in range(ny)]
+    fLst = list()
+    for filePath in filePathLst:
+        if os.path.exists(filePath):
+            os.remove(filePath)
+        f = open(filePath, 'a')
+        fLst.append(f)
+
+    # 初始化参数数组（只在需要时）
+    if type(model) in [rnn.CudnnLstmModel_R2P, rnn.CudnnLstmModel_Inv]:
+        all_parameters = []
+    
+    # forward for each batch
+    for i in range(0, len(iS)):
+        # print('batch {}'.format(i)) # temp comment for SCEUA
+        if type(model) is rnn.CudnnLstmModel_Inv:
+            xTrainTemp = xTrain_temp[iS[i]:iE[i], :, :]
+            xTestTemp = xTest_temp[iS[i]:iE[i], :, :]
+        else:
+            xTemp = x[iS[i]:iE[i], :, :]
+
+        if c is not None:
+            if type(model) is rnn.CudnnLstmModel_Inv:
+                if type(c) is tuple or type(c) is list:  ## only for VIC LAI factor
+                    cTemp_est = np.repeat(
+                        np.reshape(est_c[iS[i]:iE[i], :], [iE[i] - iS[i], 1, nc_est]), ntTrain, axis=1)
+                    cTemp_fixed = np.repeat(
+                        np.reshape(fixed_c[iS[i]:iE[i], :], [iE[i] - iS[i], 1, nc_fixed]), ntTrain, axis=1)
+                    xTrain_Inv = torch.from_numpy(np.swapaxes(xTrainTemp, 1, 0)).float()
+                    xTest_Inv = torch.from_numpy(np.swapaxes(xTestTemp, 1, 0)).float()
+                else:
+                    cTemp = np.repeat(
+                        np.reshape(c[iS[i]:iE[i], :], [iE[i] - iS[i], 1, nc]), ntTrain, axis=1)
+                    xTrain_Inv = torch.from_numpy(np.swapaxes(xTrainTemp, 1, 0)).float()
+                    xTest_Inv = torch.from_numpy(np.swapaxes(xTestTemp, 1, 0)).float()
+            else:
+                cTemp = np.repeat(
+                    np.reshape(c[iS[i]:iE[i], :], [iE[i] - iS[i], 1, nc]), nt, axis=1)
+                xTest = torch.from_numpy(
+                    np.swapaxes(np.concatenate([xTemp, cTemp], 2), 1, 0)).float()
+        else:
+            xTest = torch.from_numpy(
+                np.swapaxes(xTemp, 1, 0)).float()
+        if torch.cuda.is_available():
+            if type(model) is rnn.CudnnLstmModel_Inv:
+                xTrain_Inv = xTrain_Inv.cuda()
+                xTest_Inv = xTest_Inv.cuda()
+            else:
+                xTest = xTest.cuda()
+        if z is not None:
+            if type(model) in [rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:
+                zTest = torch.from_numpy(z[iS[i]:iE[i], :]).float()
+            else:
+                zTemp = z[iS[i]:iE[i], :, :]
+                zTest = torch.from_numpy(np.swapaxes(zTemp, 1, 0)).float()
+            if torch.cuda.is_available():
+                zTest = zTest.cuda()
+        if type(model) in [rnn.CudnnLstmModel, rnn.AnnModel, rnn.CpuLstmModel]:
+            # if z is not None:
+            #     xTest = torch.cat((xTest, zTest), dim=2)
+            yP = model(xTest)
+            if doMC is not False:
+                ySS = np.zeros(yP.shape)
+                yPnp=yP.detach().cpu().numpy()
+                for k in range(doMC):
+                    # print(k)
+                    yMC = model(xTest, doDropMC=True).detach().cpu().numpy()
+                    ySS = ySS+np.square(yMC-yPnp)
+                ySS = np.sqrt(ySS)/doMC
+
+        if type(model) in [rnn.LstmCloseModel, rnn.AnnCloseModel, rnn.CNN1dLSTMmodel, rnn.CNN1dLSTMInmodel,
+                           rnn.CNN1dLCmodel, rnn.CNN1dLCInmodel]:
+            yP = model(xTest, zTest)
+
+        if type(model) in [hydroDL.model.rnn.LstmCnnForcast]:
+            yP = model(xTest, zTest)
+
+        if type(model) in [rnn.CudnnLstmModel_R2P]:
+            xTemp = torch.from_numpy(np.swapaxes(xTemp,1,0)).float()
+            cTemp = torch.from_numpy(np.swapaxes(cTemp,1,0)).float()
+            xTemp = xTemp.cuda()
+            cTemp = cTemp.cuda()
+            xTest_tuple = (xTemp, cTemp)
+            if outModel is None:
+                yP, Param_R2P = model(xTest_tuple, outModel = outModel, lyrMode=lyrMode)
+                Parameters_R2P = Param_R2P.detach().cpu().numpy().swapaxes(0, 1)
+            else:
+                Param_R2P = model(xTest_tuple, outModel = outModel)
+                Parameters_R2P = Param_R2P.detach().cpu().numpy()
+                hymod_forcing = xTemp.detach().cpu().numpy().swapaxes(0, 1)
+
+                runFile = os.path.join(savePath, 'hymod_run.csv')
+                rf = open(runFile, 'a+')
+
+                q = torch.zeros(hymod_forcing.shape[0], hymod_forcing.shape[1])
+                evap = torch.zeros(hymod_forcing.shape[0], hymod_forcing.shape[1])
+                for pix in range(hymod_forcing.shape[0]):
+                    model_hymod = rnn.hymod(a=Parameters_R2P[pix,0], b=Parameters_R2P[pix,1],\
+                        cmax=Parameters_R2P[pix,2], rq=Parameters_R2P[pix,3],\
+                            rs=Parameters_R2P[pix,4], s=Parameters_R2P[pix,5],\
+                                slow=Parameters_R2P[pix,6],\
+                                    fast=[Parameters_R2P[pix,7], Parameters_R2P[pix,8], Parameters_R2P[pix,9]])
+                    for hymod_t in range(hymod_forcing.shape[1]):
+                        q[pix, hymod_t], evap[pix, hymod_t] = model_hymod.advance(hymod_forcing[pix,hymod_t,0],hymod_forcing[pix,hymod_t,1])
+                        nstepsLst = '{:.5f} {:.5f} {:.5f} {:.5f}'.format(hymod_forcing[pix,hymod_t,0], hymod_forcing[pix,hymod_t,1], q[pix,hymod_t], evap[pix,hymod_t])
+                        print(nstepsLst)
+
+                        rf.write(nstepsLst + '\n')      
+        if type(model) in [rnn.CudnnLstmModel_Inv]:
+            test = True
+
+            if fixed_params is True:
+                cTemp_fixed = torch.from_numpy(np.swapaxes(cTemp_fixed, 1, 0)).float()
+                cTemp_fixed = cTemp_fixed.cuda()
+                cTemp_est = torch.from_numpy(np.swapaxes(cTemp_est, 1, 0)).float()
+                cTemp_est = cTemp_est.cuda()
+                xTest_tuple = (xTrain_Inv, xTest_Inv, cTemp_est, cTemp_fixed)
+            else:
+                cTemp = torch.from_numpy(np.swapaxes(cTemp, 1, 0)).float()
+                cTemp = cTemp.cuda()
+                xTest_tuple = (xTrain_Inv, xTest_Inv, cTemp)
+
+            yP, Param_R2P = model(xTest_tuple, zTest, testMode=test, outModel=outModel, lyrMode=lyrMode,
+                                  scaleTrans=True, routingModel=routingModel,
+                                  lenF=lenF, fixed_params=fixed_params)  # will also send in the y for inversion generator
+
+        # CP-- marks the beginning of problematic merge
+        yOut = yP.detach().cpu().numpy().swapaxes(0, 1)
+        
+        if doMC is not False:
+            yOutMC = ySS.swapaxes(0, 1)
+
+        # save output - 修复后的逻辑
+        for k in range(ny):
+            f = fLst[k]
+            pd.DataFrame(yOut[:, :, k]).to_csv(f, header=False, index=False)
+        
+        # 对于需要保存参数的模型，收集参数数据
+        if type(model) in [rnn.CudnnLstmModel_R2P, rnn.CudnnLstmModel_Inv]:
+            Parameters_R2P = Param_R2P.detach().cpu().numpy().swapaxes(0, 1)
+            all_parameters.append(Parameters_R2P)
+
+        if doMC is not False:
+            for k in range(ny):
+                f = fLst[ny+k]
+                pd.DataFrame(yOutMC[:, :, k]).to_csv(
+                    f, header=False, index=False)
+
+        model.zero_grad()
+        torch.cuda.empty_cache()
+
+    # 保存参数数据（在循环外部）
+    if type(model) in [rnn.CudnnLstmModel_R2P, rnn.CudnnLstmModel_Inv]:
+        if all_parameters:
+            # 合并所有批次的参数
+            all_parameters_concat = np.concatenate(all_parameters, axis=0)
+            # 写入最后一个文件（参数文件）
+            f = fLst[ny]  # 第ny个文件是参数文件
+            pd.DataFrame(all_parameters_concat).to_csv(f, header=False, index=False)
+            print(f"参数数据形状: {all_parameters_concat.shape}")
+            print(f"参数保存到: {filePathLst[ny]}")
+
+    for f in fLst:
+        f.close()
+
+    if type(model) in [rnn.CudnnLstmModel_R2P, rnn.CudnnLstmModel_Inv]:
+        Parameters_R2P = torch.from_numpy(all_parameters_concat) if 'all_parameters_concat' in locals() else None
+        if outModel is None:
+            return yOut, Parameters_R2P
+        else:
+            return q, evap, Parameters_R2P
+    else:
+        return yOut
+
+
+def testModelCnnCond(model, x, y, *, batchSize=None):
+    ngrid, nt, nx = x.shape
+    ct = model.ct
+    ny = model.ny
+    if batchSize is None:
+        batchSize = ngrid
+    xTest = torch.from_numpy(np.swapaxes(x, 1, 0)).float()
+    # cTest = torch.from_numpy(np.swapaxes(y[:, 0:ct, :], 1, 0)).float()
+    cTest = torch.zeros([ct, ngrid, y.shape[-1]], requires_grad=False)
+    for k in range(ngrid):
+        ctemp = y[k, 0:ct, 0]
+        i0 = np.where(np.isnan(ctemp))[0]
+        i1 = np.where(~np.isnan(ctemp))[0]
+        if len(i1) > 0:
+            ctemp[i0] = np.interp(i0, i1, ctemp[i1])
+            cTest[:, k, 0] = torch.from_numpy(ctemp)
+
+    if torch.cuda.is_available():
+        xTest = xTest.cuda()
+        cTest = cTest.cuda()
+        model = model.cuda()
+
+    model.train(mode=False)
+
+    yP = torch.zeros([nt - ct, ngrid, ny])
+    iS = np.arange(0, ngrid, batchSize)
+    iE = np.append(iS[1:], ngrid)
+    for i in range(0, len(iS)):
+        xTemp = xTest[:, iS[i]:iE[i], :]
+        cTemp = cTest[:, iS[i]:iE[i], :]
+        yP[:, iS[i]:iE[i], :] = model(xTemp, cTemp)
+    yOut = yP.detach().cpu().numpy().swapaxes(0, 1)
+    return yOut
+
+
+def randomSubset(x, y, dimSubset):
+    ngrid, nt, nx = x.shape
+    batchSize, rho = dimSubset
+    xTensor = torch.zeros([rho, batchSize, x.shape[-1]], requires_grad=False)
+    yTensor = torch.zeros([rho, batchSize, y.shape[-1]], requires_grad=False)
+    iGrid = np.random.randint(0, ngrid, [batchSize])
+    iT = np.random.randint(0, nt - rho, [batchSize])
+    for k in range(batchSize):
+        temp = x[iGrid[k]:iGrid[k] + 1, np.arange(iT[k], iT[k] + rho), :]
+        xTensor[:, k:k + 1, :] = torch.from_numpy(np.swapaxes(temp, 1, 0))
+        temp = y[iGrid[k]:iGrid[k] + 1, np.arange(iT[k], iT[k] + rho), :]
+        yTensor[:, k:k + 1, :] = torch.from_numpy(np.swapaxes(temp, 1, 0))
+    if torch.cuda.is_available():
+        xTensor = xTensor.cuda()
+        yTensor = yTensor.cuda()
+    return xTensor, yTensor
+
+
+def randomIndex(ngrid, nt, dimSubset):
+    batchSize, rho = dimSubset
+    iGrid = np.random.randint(0, ngrid, [batchSize])
+    iT = np.random.randint(0, nt - rho, [batchSize])
+    return iGrid, iT
+
+
+def selectSubset(x, iGrid, iT, rho, *, c=None, tupleOut=False):
+    nx = x.shape[-1]
+    nt = x.shape[1]
+    if x.shape[0] == len(iGrid):   # hack
+        iGrid = np.arange(0,len(iGrid))  # hack
+        if nt <= rho:
+            iT.fill(0)
+
+    if iT is not None:
+        batchSize = iGrid.shape[0]
+        xTensor = torch.zeros([rho, batchSize, nx], requires_grad=False)
+        for k in range(batchSize):
+            temp = x[iGrid[k]:iGrid[k] + 1, np.arange(iT[k], iT[k] + rho), :]
+            xTensor[:, k:k + 1, :] = torch.from_numpy(np.swapaxes(temp, 1, 0))
+    else:
+        if len(x.shape) == 2:
+            # Used for local calibration kernel
+            # x = Ngrid * Ntime
+            xTensor = torch.from_numpy(x[iGrid, :]).float()
+        else:
+            # Used for rho equal to the whole length of time series
+            xTensor = torch.from_numpy(np.swapaxes(x[iGrid, :, :], 1, 0)).float()
+            rho = xTensor.shape[0]
+    if c is not None:
+        if type(c) is tuple or type(c) is list:
+            est_c, fixed_c = c
+            nc_est = est_c.shape[-1]
+            nc_fixed = fixed_c.shape[-1]
+            temp1 = np.repeat(
+                np.reshape(est_c[iGrid, :], [batchSize, 1, nc_est]), rho, axis=1)
+            temp2 = np.repeat(
+                np.reshape(fixed_c[iGrid, :], [batchSize, 1, nc_fixed]), rho, axis=1)
+            cTensor_est = torch.from_numpy(np.swapaxes(temp1, 1, 0)).float()
+            cTensor_fixed = torch.from_numpy(np.swapaxes(temp2, 1, 0)).float()
+            # cTensor = (cTensor_est, cTensor_fixed)
+            if (tupleOut):
+                if torch.cuda.is_available():
+                    xTensor = xTensor.cuda()
+                    cTensor_est = cTensor_est.cuda()
+                    cTensor_fixed = cTensor_fixed.cuda()
+                out = (xTensor, cTensor_est, cTensor_fixed)
+            else:
+                out = torch.cat((xTensor, cTensor_est, cTensor_fixed), 2)
+
+        else:
+            nc = c.shape[-1]
+            temp = np.repeat(
+                np.reshape(c[iGrid, :], [batchSize, 1, nc]), rho, axis=1)
+            cTensor = torch.from_numpy(np.swapaxes(temp, 1, 0)).float()
+
+            if (tupleOut):
+                if torch.cuda.is_available():
+                    xTensor = xTensor.cuda()
+                    cTensor = cTensor.cuda()
+                out = (xTensor, cTensor)
+            else:
+                out = torch.cat((xTensor, cTensor), 2)
+    else:
+        out = xTensor
+
+    if torch.cuda.is_available() and type(out) is not tuple:
+        out = out.cuda()
+    return out
